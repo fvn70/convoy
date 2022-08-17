@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import sqlite3
@@ -5,7 +6,7 @@ from sqlite3 import Error
 import pandas as pd
 
 
-def create_db(db_file):
+def connect_db(db_file):
     conn = None
     try:
         conn = sqlite3.connect(db_file)
@@ -50,11 +51,13 @@ def select_all(conn):
     for row in rows:
         print(row)
 
-def read_data(path):
+def read_data(conn, path):
     fn = path.split(os.sep)[-1]
     f = fn.split('.')
 
-    if f[-1] == 'xlsx':
+    if f[-1] == 's3db':
+        df = pd.read_sql_query("SELECT * FROM convoy", conn)
+    elif f[-1] == 'xlsx':
         df = pd.read_excel(path, sheet_name='Vehicles', dtype=str)
         fn = f[-2] + '.csv'
         df.to_csv(fn, index=False)
@@ -83,25 +86,38 @@ def edit_data(df, path):
 
     return df
 
+def write_data(df, path):
+    fn = path.split(os.sep)[-1].split('.')[-2] + '.json'
+    fn = re.sub('\[CHECKED\]', '', fn)
+    out = df.to_json(orient='records')
+    out = f'{{"convoy": {out}}}'
+    with open(fn, 'w') as f:
+        f.write(out)
+    cnt = df.shape[0]
+    print(f'{cnt} vehicle{"s were" if cnt > 1 else " was"} saved into {fn}')
+
 def get_path():
     path = input('Input file name\n')
-    # path = '../test/data_big_chk[CHECKED].csv'
+    # path = '../test/data_one_xlsx.xlsx'
     path = os.path.normpath(path)
     return path
 
 
 p = get_path()
-df = read_data(p)
-df = edit_data(df, p)
-
 f = p.split(os.sep)[-1].split('.')
-db_name = f[-2] + '.s3db'
-db_name = re.sub('\[CHECKED\]', '', db_name)
-conn = create_db(db_name)
-create_table(conn)
-add_data(df, conn, db_name)
+ext = f[-1]
+name = f[-2]
 
-# select_all(conn)
+db_name = name + '.s3db'
+db_name = re.sub('\[CHECKED\]', '', db_name)
+conn = connect_db(db_name)
+
+df = read_data(conn, p)
+if ext != 's3db':
+    df = edit_data(df, p)
+    create_table(conn)
+    add_data(df, conn, db_name)
+write_data(df, p)
 
 if conn:
     conn.close()
