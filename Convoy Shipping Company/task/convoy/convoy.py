@@ -82,23 +82,36 @@ def edit_data(df, path):
 
         fn = f'{f[-2]}[CHECKED].csv'
         df.to_csv(fn, index=False)
-        print(f'{cnt} cell{"s were" if cnt > 1 else " was"} corrected in {f[-2]}[CHECKED].csv')
+        print(f'{cnt} cell{"s were" if cnt > 1 else " was"} corrected in {fn}')
 
     return df
 
-def write_data(df, path):
-    fn = path.split(os.sep)[-1].split('.')[-2] + '.json'
+def write_data(df, path, ext):
+    fn = path.split(os.sep)[-1].split('.')[-2] + '.' + ext
     fn = re.sub('\[CHECKED\]', '', fn)
-    out = df.to_json(orient='records')
-    out = f'{{"convoy": {out}}}'
+    if ext == 'json':
+        out = df.to_json(orient='records')
+        out = f'{{"convoy": {out}}}'
+    else:
+        out = df_to_xml(df)
     with open(fn, 'w') as f:
         f.write(out)
     cnt = df.shape[0]
     print(f'{cnt} vehicle{"s were" if cnt > 1 else " was"} saved into {fn}')
 
+def df_to_xml(df):
+    xml = ['<convoy>']
+    for i, row in df.iterrows():
+        xml.append('<vehicle>')
+        for fld in row.index:
+            xml.append(f'<{fld}>{row[fld]}</{fld}>')
+        xml.append('</vehicle>')
+    xml.append('</convoy>')
+    return ''.join(xml)
+
 def get_path():
     path = input('Input file name\n')
-    # path = '../test/data_one_xlsx.xlsx'
+    # path = '../test/data_big_xlsx.xlsx'
     path = os.path.normpath(path)
     return path
 
@@ -117,7 +130,8 @@ if ext != 's3db':
     df = edit_data(df, p)
     create_table(conn)
     add_data(df, conn, db_name)
-write_data(df, p)
+write_data(df, p, 'json')
+write_data(df, p, 'xml')
 
 if conn:
     conn.close()
